@@ -1,5 +1,5 @@
 // オフライン対応（アプリ本体をキャッシュ）
-const CACHE = 'pachi-habit-v1';
+const CACHE = 'pachi-habit-v2';
 const ASSETS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/store.js', './js/line-bridge.js', './js/app.js',

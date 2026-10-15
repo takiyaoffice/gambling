@@ -16,3 +16,4 @@ HTTPSで公開するとスマートフォンの「ホーム画面に追加」で
 - `js/store.js` … 記録の保存と集計
 - `js/line-bridge.js` … 通知設定を外部の通知サービスへ渡すだけの窓口
 - `line-notifier/` … LINE通知サービス（アプリ本体とは別に動作）
+- `docs/design-reference.png` … デザイン参照画像
