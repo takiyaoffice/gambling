@@ -8,6 +8,8 @@
 python3 -m http.server 8080   # http://localhost:8080 を開く
 ```
 
+`main` に push すると GitHub Actions で GitHub Pages（https://takiyaoffice.github.io/gambling/）にデプロイされます。
+
 HTTPSで公開するとスマートフォンの「ホーム画面に追加」でアプリとして使えます。記録は端末内（localStorage）に保存されます。
 
 ## 構成
