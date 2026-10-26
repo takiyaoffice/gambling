@@ -25,6 +25,7 @@
     expert: '<circle cx="12" cy="7" r="4.2"/><path d="M3.5 21.5a8.5 8.5 0 0 1 17 0z"/><path d="M11 13.2h2l.7 2.3-1.7 3-1.7-3z" class="cut"/>',
     partner: '<path d="M3 4h13a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4.5 3.5V15H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M20 8h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1v3l-3.5-3H11a2 2 0 0 1-1.8-1.2H16a4 4 0 0 0 4-4z"/>',
     hobby: '<rect x="1" y="9" width="3" height="6" rx="1"/><rect x="4.5" y="6.5" width="3.2" height="11" rx="1"/><rect x="16.3" y="6.5" width="3.2" height="11" rx="1"/><rect x="20" y="9" width="3" height="6" rx="1"/><rect x="7.5" y="11" width="9" height="2"/>',
+    clinic: '<path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M10.2 7h3.6v3.2H17v3.6h-3.2V17h-3.6v-3.2H7v-3.6h3.2z" class="cut"/>',
     other: '<path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M8 11h8M8 14.5h8M8 18h5" class="cut-line"/>',
   };
   const icon = (id, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[id] || ''}</svg>`;
@@ -43,6 +44,15 @@
   const urgeTone = (n) => (n <= 1 ? 'low' : n <= 3 ? 'mid' : 'high');
   const face = (n, on) => `<svg viewBox="0 0 24 24" class="face ${on ? 'on ' + urgeTone(n) : ''}"><circle cx="12" cy="12" r="10"/><circle cx="8.7" cy="10" r="1.1" class="eye"/><circle cx="15.3" cy="10" r="1.1" class="eye"/><path d="${FACE_MOUTH[n]}" class="mouth"/></svg>`;
 
+  // 予定の種類 → アイコン、参加状況 → バッジ
+  const PLAN_ICON = { ga: 'ga', clinic: 'clinic', counseling: 'expert', other: 'other' };
+  const planLabel = (p) => (Store.PLAN_KINDS.find((k) => k.id === p.kind) || {}).label || '予定';
+  const STATUS_BADGE = {
+    planned: '<span class="badge plan">予定</span>',
+    attended: '<span class="badge attended">参加した</span>',
+    missed: '<span class="badge none">参加しなかった</span>',
+  };
+
   const CHEVRON = '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>';
   const appbar = (center, left = '', right = '') =>
     `<header class="appbar"><div class="appbar-side">${left}</div><h1>${center}</h1><div class="appbar-side right">${right}</div></header>`;
@@ -56,8 +66,8 @@
 
   // ---------------- ルーティング ----------------
   function parseRoute() {
-    const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
-    return { name: name || 'home', arg };
+    const [name, arg, arg2] = location.hash.replace(/^#\/?/, '').split('/');
+    return { name: name || 'home', arg, arg2 };
   }
 
   function go(hash) { location.hash = hash; }
@@ -65,14 +75,16 @@
   function back(fallback) { go(fallback); }
 
   function render() {
-    const { name, arg } = parseRoute();
+    const { name, arg, arg2 } = parseRoute();
+    const full = name === 'record' || name === 'plan';
     const tab = ['home', 'calendar', 'review', 'settings'].includes(name) ? name : 'home';
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.route === tab));
-    $tabbar.hidden = name === 'record';
-    document.body.classList.toggle('has-tabbar', name !== 'record');
+    $tabbar.hidden = full;
+    document.body.classList.toggle('has-tabbar', !full);
 
     if (name === 'home' || name === 'calendar') ui.from = name;
     if (name === 'record' && /^\d{4}-\d{2}-\d{2}$/.test(arg || '')) renderRecord(arg);
+    else if (name === 'plan' && /^\d{4}-\d{2}-\d{2}$/.test(arg || '')) renderPlan(arg, arg2 || 'new');
     else if (name === 'calendar') renderCalendar();
     else if (name === 'review') renderReview();
     else if (name === 'settings') renderSettings(arg);
@@ -144,8 +156,11 @@
       const rec = Store.getRecord(key);
       const future = key > todayKey;
       const cls = rec ? rec.type : future ? 'future' : 'none';
-      cells += `<button class="day ${cls} ${key === ui.selected ? 'sel' : ''}" data-key="${key}" ${future ? 'disabled' : ''}
-        aria-label="${d.getMonth() + 1}月${d.getDate()}日 ${rec ? (rec.type === 'played' ? '行った日' : '行かなかった日') : '未記録'}"><i>${d.getDate()}</i></button>`;
+      const event = !future && Store.attendedOn(key);
+      const planned = Store.hasPlanned(key);
+      const label = (rec ? (rec.type === 'played' ? '行った日' : '行かなかった日') : future ? '' : '未記録') + (event ? ' イベント参加' : '') + (planned ? ' 予定あり' : '');
+      cells += `<button class="day ${cls} ${event ? 'event' : ''} ${key === ui.selected ? 'sel' : ''}" data-key="${key}"
+        aria-label="${d.getMonth() + 1}月${d.getDate()}日 ${label}"><i>${d.getDate()}</i>${planned ? '<b class="pdot"></b>' : ''}</button>`;
     }
 
     const prev = `<button class="icon-btn" id="prev" aria-label="前の月"><svg viewBox="0 0 24 24" class="stroke"><path d="m15 6-6 6 6 6"/></svg></button>`;
@@ -155,18 +170,39 @@
       <section class="cal">
         <div class="cal-week">${WEEK_MON.map((w) => `<span>${w}</span>`).join('')}</div>
         <div class="cal-grid">${cells}</div>
+        <div class="cal-legend">
+          <span><i class="lg skipped"></i>行かなかった</span><span><i class="lg played"></i>行った</span><span><i class="lg none"></i>未記録</span>
+          <span><i class="lg event"></i>イベント参加</span><span><i class="lg-dot"></i>予定</span>
+        </div>
       </section>
-      <div class="page tight">${dayPanel(ui.selected)}</div>`;
+      <div class="page tight">${dayPanel(ui.selected)}${plansCard(ui.selected)}</div>`;
 
     document.getElementById('prev').onclick = () => shiftMonth('cal', -1);
     document.getElementById('next').onclick = () => shiftMonth('cal', 1);
     $view.querySelectorAll('.day[data-key]').forEach((b) => b.addEventListener('click', () => {
-      if (ui.selected === b.dataset.key) { go('record/' + b.dataset.key); return; }
+      if (ui.selected === b.dataset.key) { go((b.dataset.key > todayKey ? 'plan/' : 'record/') + b.dataset.key); return; }
       ui.selected = b.dataset.key;
       renderCalendar();
     }));
     const panel = document.getElementById('day-panel');
     if (panel) panel.onclick = () => go('record/' + ui.selected);
+    document.getElementById('add-plan').onclick = () => go(`plan/${ui.selected}/new`);
+    $view.querySelectorAll('[data-plan]').forEach((b) => (b.onclick = () => go(`plan/${ui.selected}/${b.dataset.plan}`)));
+  }
+
+  function plansCard(key) {
+    const list = Store.plansOn(key);
+    const future = key > Store.todayKey();
+    return `
+      <section class="card plans">
+        <div class="plans-head"><b>${future ? shortDate(key) + 'の予定' : '予定・イベント'}</b><button class="link-btn" id="add-plan">＋ 予定を追加</button></div>
+        ${list.length ? `<ul class="plan-list">${list.map((p) => `
+          <li><button class="plan-item" data-plan="${p.id}">
+            ${icon(PLAN_ICON[p.kind])}
+            <span class="plan-main"><b>${planLabel(p)}${p.time ? `<small>${esc(p.time)}</small>` : ''}</b>${p.note ? `<span>${esc(p.note)}</span>` : ''}</span>
+            ${STATUS_BADGE[p.status] || ''}${CHEVRON}
+          </button></li>`).join('')}</ul>` : '<p class="panel-text muted">予定はありません</p>'}
+      </section>`;
   }
 
   function dayPanel(key) {
@@ -359,6 +395,107 @@
       toast('保存しました');
       ui.selected = key;
       back(ui.from || 'calendar');
+    };
+  }
+
+  // ---------------- 予定の追加・編集 ----------------
+  function renderPlan(date, id) {
+    const existing = id === 'new' ? null : Store.getPlan(id);
+    if (id !== 'new' && !existing) { go('calendar'); return; }
+    const todayKey = Store.todayKey();
+    const f = {
+      kind: existing?.kind || 'ga',
+      date: existing?.date || date,
+      time: existing?.time || '',
+      note: existing?.note || '',
+      status: existing?.status || 'planned',
+    };
+
+    const backBtn = `<button class="icon-btn" id="back" aria-label="戻る"><svg viewBox="0 0 24 24" class="stroke"><path d="M20 12H5m6-6-6 6 6 6"/></svg></button>`;
+    const delBtn = existing ? `<button class="icon-btn" id="del" aria-label="予定を削除"><svg viewBox="0 0 24 24" class="stroke"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>` : '';
+
+    $view.innerHTML = appbar(existing ? '予定の編集' : '予定の追加', backBtn, delBtn) + `
+      <div class="page record" id="plan"></div>
+      <div class="savebar"><button class="btn-primary" id="save">保存する</button></div>`;
+    const $plan = document.getElementById('plan');
+
+    function draw() {
+      const past = f.date && f.date <= todayKey;
+      $plan.innerHTML = `
+        <h2 class="sec-title">種類</h2>
+        <div class="tiles">${Store.PLAN_KINDS.map((k) => {
+          const on = f.kind === k.id;
+          return `<button type="button" class="tile ${on ? 'on' : ''}" data-kind="${k.id}" aria-pressed="${on}">
+            <span class="tile-ic">${icon(PLAN_ICON[k.id])}</span><span>${k.label}</span></button>`;
+        }).join('')}</div>
+
+        <h2 class="sec-title">日時</h2>
+        <div class="box rows">
+          <label class="row"><span>日付</span><input type="date" id="p-date" class="field slim" value="${esc(f.date)}"></label>
+          <label class="row"><span>時刻（任意）</span><input type="time" id="p-time" class="field slim" value="${esc(f.time)}"></label>
+        </div>
+
+        <h2 class="sec-title">場所・メモ</h2>
+        <textarea id="p-note" class="box memo" rows="3" placeholder="会場や持ち物など">${esc(f.note)}</textarea>
+
+        ${past ? `
+          <h2 class="sec-title">参加状況</h2>
+          <div class="seg3">
+            <button type="button" data-status="attended" class="${f.status === 'attended' ? 'on ok' : ''}">参加した</button>
+            <button type="button" data-status="missed" class="${f.status === 'missed' ? 'on ng' : ''}">参加しなかった</button>
+            <button type="button" data-status="planned" class="${f.status === 'planned' ? 'on' : ''}">未確認</button>
+          </div>
+          <p class="hint-text">「参加した」にするとカレンダーの日付が実績の色になります</p>` : ''}`;
+    }
+
+    function readInputs() {
+      f.date = document.getElementById('p-date').value;
+      f.time = document.getElementById('p-time').value;
+      f.note = document.getElementById('p-note').value;
+    }
+
+    $plan.addEventListener('click', (e) => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      readInputs();
+      if (t.dataset.kind) f.kind = t.dataset.kind;
+      else if (t.dataset.status) f.status = t.dataset.status;
+      else return;
+      draw();
+    });
+    // 日付を変えたら参加状況欄の表示を切り替える
+    $plan.addEventListener('change', (e) => { if (e.target.id === 'p-date') { readInputs(); draw(); } });
+
+    draw();
+
+    const done = (key) => {
+      ui.selected = key;
+      const d = Store.fromKey(key);
+      ui.calYear = d.getFullYear();
+      ui.calMonth = d.getMonth();
+      go('calendar');
+    };
+
+    document.getElementById('back').onclick = () => done(existing?.date || date);
+    if (existing) document.getElementById('del').onclick = () => {
+      if (!confirm('この予定を削除しますか？')) return;
+      Store.deletePlan(existing.id);
+      toast('予定を削除しました');
+      done(existing.date);
+    };
+    document.getElementById('save').onclick = () => {
+      readInputs();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) { toast('日付を入力してください'); return; }
+      Store.setPlan({
+        id: existing?.id,
+        kind: f.kind,
+        date: f.date,
+        time: f.time,
+        note: f.note.trim(),
+        status: f.date > todayKey ? 'planned' : f.status,
+      });
+      toast('予定を保存しました');
+      done(f.date);
     };
   }
 

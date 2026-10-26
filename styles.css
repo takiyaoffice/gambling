@@ -17,6 +17,8 @@
   --orange: #f6a53b;
   --orange-soft: #fdebd0;
   --orange-border: #f2c27e;
+  --plan: #3f7fd0;           /* 予定 */
+  --plan-soft: #e3eefb;
   --radius: 8px;
   --tabbar-h: 58px;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -112,6 +114,44 @@ svg.stroke { fill: none !important; stroke: currentColor; stroke-width: 2; strok
 .day.sel i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
 .day:not(:disabled):active i { transform: scale(.92); }
 .day:disabled { cursor: default; }
+.day { position: relative; }
+/* イベント参加の実績（濃い緑） */
+.day.event.skipped i { background: var(--primary); color: #fff; }
+.day.event.none i { border: 2.5px solid var(--primary); color: var(--primary); font-weight: 800; }
+.day.event.played i { border: 3px solid var(--primary); }
+/* 予定あり */
+.pdot { position: absolute; bottom: 1px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--plan); }
+
+.cal-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; margin-top: 8px; font-size: 11px; color: var(--sub); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.lg { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1.5px solid transparent; }
+.lg.skipped { background: var(--green-day); }
+.lg.played { background: var(--red); }
+.lg.none { border-color: #d3d7d3; }
+.lg.event { background: var(--primary); }
+.lg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--plan); display: inline-block; margin: 0 3px; }
+
+.badge.plan { background: var(--plan-soft); color: var(--plan); }
+.badge.attended { background: var(--primary); color: #fff; }
+.plans { padding: 14px; }
+.plans-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.plans-head b { font-size: 14px; }
+.link-btn { color: var(--primary); font-weight: 700; font-size: 13px; padding: 6px 0 6px 8px; }
+.plan-list { list-style: none; }
+.plan-list li + li { border-top: 1px solid #f0f1f0; }
+.plan-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 0; text-align: left; }
+.plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.plan-main b { font-size: 13px; }
+.plan-main b small { font-weight: 500; color: var(--sub); margin-left: 8px; }
+.plan-main span { font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.field.slim { height: 36px; min-width: 140px; }
+.seg3 { display: grid; grid-template-columns: repeat(3, 1fr); background: #eef0ee; border-radius: 8px; padding: 3px; gap: 3px; }
+.seg3 button { height: 40px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--sub); text-align: center; }
+.seg3 button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.seg3 button.on.ok { color: var(--primary); }
+.seg3 button.on.ng { color: var(--red-text); }
+.hint-text { font-size: 12px; color: var(--sub); margin-top: 6px; }
 
 .panel { width: 100%; display: block; text-align: left; padding: 14px; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }

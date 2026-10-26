@@ -15,6 +15,15 @@
   // なぜ行きたくなったか（きっかけ）
   const TRIGGERS = ['返済を早く進めたい', '負けを取り返したい', '勝ってお金を増やしたい', 'なんとなく打ちたい', 'ストレス・気分転換', 'その他'];
 
+  // 予定・イベントの種類
+  const PLAN_KINDS = [
+    { id: 'ga', label: 'GA' },
+    { id: 'clinic', label: '診察' },
+    { id: 'counseling', label: 'カウンセリング' },
+    { id: 'other', label: 'その他' },
+  ];
+  const PLAN_STATUS = ['planned', 'attended', 'missed'];
+
   const DEFAULT_SETTINGS = {
     monthlyGoal: 2,
     budget: 5000,
@@ -24,6 +33,7 @@
   function normalize(raw) {
     return {
       records: (raw && raw.records) || {},
+      plans: (raw && raw.plans) || {},
       settings: {
         ...DEFAULT_SETTINGS,
         ...(raw && raw.settings),
@@ -64,6 +74,40 @@
   function deleteRecord(key) {
     delete state.records[key];
     save();
+  }
+
+  // ---- 予定・イベント（記録とは別に保存） ----
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  function plansOn(key) {
+    return Object.values(state.plans)
+      .filter((p) => p.date === key)
+      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+  }
+
+  function getPlan(id) { return state.plans[id] || null; }
+
+  function setPlan(plan) {
+    const id = plan.id || newId();
+    state.plans[id] = { ...plan, id, updatedAt: Date.now() };
+    save();
+    return id;
+  }
+
+  function deletePlan(id) {
+    delete state.plans[id];
+    save();
+  }
+
+  // イベント参加の実績：予定を「参加した」にした日、または改善行動でGA参加・専門家に相談を記録した日
+  function attendedOn(key) {
+    if (plansOn(key).some((p) => p.status === 'attended')) return true;
+    const r = state.records[key];
+    return !!(r && (r.actions || []).some((a) => a === 'ga' || a === 'expert'));
+  }
+
+  function hasPlanned(key) {
+    return plansOn(key).some((p) => p.status === 'planned');
   }
 
   function updateSettings(patch) {
@@ -113,21 +157,24 @@
   }
 
   // ---- CSVバックアップ ----
-  const CSV_COLS = ['date', 'type', 'amount', 'balance', 'budgetKept', 'urge', 'triggers', 'actions', 'memo'];
+  const CSV_COLS_V1 = ['date', 'type', 'amount', 'balance', 'budgetKept', 'urge', 'triggers', 'actions', 'memo'];
+  const CSV_COLS = [...CSV_COLS_V1, 'kind', 'time', 'status'];
   const csvCell = (v) => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
   function exportCSV() {
     const rows = Object.keys(state.records).sort().map((k) => {
       const r = state.records[k];
       return [k, r.type, r.amount ?? '', r.balance ?? '', r.type === 'played' ? (r.budgetKept ? 1 : 0) : '',
-        r.urge ?? '', (r.triggers || []).join('|'), (r.actions || []).join('|'), r.memo || ''].map(csvCell).join(',');
+        r.urge ?? '', (r.triggers || []).join('|'), (r.actions || []).join('|'), r.memo || '', '', '', ''].map(csvCell).join(',');
     });
-    return '﻿' + [CSV_COLS.join(','), ...rows].join('\r\n');
+    const plans = Object.values(state.plans).sort((a, b) => a.date.localeCompare(b.date)).map((p) =>
+      [p.date, 'plan', '', '', '', '', '', '', p.note || '', p.kind, p.time || '', p.status].map(csvCell).join(','));
+    return '\uFEFF' + [CSV_COLS.join(','), ...rows, ...plans].join('\r\n');
   }
 
   function parseCSV(text) {
     const rows = []; let row = []; let cell = ''; let q = false;
-    text = text.replace(/^﻿/, '');
+    text = text.replace(/^\uFEFF/, '');
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
       if (q) {
@@ -147,25 +194,37 @@
 
   function importCSV(text) {
     const rows = parseCSV(text);
-    if (!rows.length || rows[0].join(',') !== CSV_COLS.join(',')) throw new Error('形式が正しくありません');
+    const header = rows.length ? rows[0].join(',') : '';
+    const hasPlans = header === CSV_COLS.join(',');
+    if (!hasPlans && header !== CSV_COLS_V1.join(',')) throw new Error('形式が正しくありません');
     const records = {};
+    const plans = {};
     rows.slice(1).forEach((c) => {
-      const [date, type, amount, balance, kept, urge, triggers, actions, memo] = c;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !['played', 'skipped'].includes(type)) return;
+      const [date, type, amount, balance, kept, urge, triggers, actions, memo, kind, time, status] = c;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      if (type === 'plan') {
+        if (!PLAN_KINDS.some((k) => k.id === kind)) return;
+        const id = newId();
+        plans[id] = { id, date, kind, time: time || '', note: memo || '', status: PLAN_STATUS.includes(status) ? status : 'planned' };
+        return;
+      }
+      if (!['played', 'skipped'].includes(type)) return;
       const split = (s) => (s ? s.split('|') : []);
       records[date] = type === 'played'
         ? { type, amount: Number(amount) || 0, balance: Number(balance) || 0, budgetKept: kept === '1', urge: Number(urge) || null, triggers: split(triggers), actions: [], memo }
         : { type, urge: Number(urge) || null, triggers: split(triggers), actions: split(actions), memo };
     });
     state.records = records;
+    if (hasPlans) state.plans = plans; // 旧形式のCSVでは予定を変更しない
     save();
     return Object.keys(records).length;
   }
 
   window.Store = {
-    ACTIONS, TRIGGERS,
+    ACTIONS, TRIGGERS, PLAN_KINDS,
     get settings() { return state.settings; },
     getRecord, setRecord, deleteRecord, updateSettings,
+    plansOn, getPlan, setPlan, deletePlan, attendedOn, hasPlanned,
     monthStats, skipStreak, exportCSV, importCSV,
     toKey, fromKey, todayKey,
   };
